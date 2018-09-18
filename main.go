@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"bytes"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -22,6 +23,22 @@ type Data struct {
 	gorm.Model
 	Name string
 	Text string
+}
+
+func useLess(txt string) error {
+
+	b := bytes.NewBuffer([]byte(txt))
+
+	c := exec.Command("less")
+	c.Stdin = b
+	c.Stdout = os.Stdout
+	c.Stderr = os.Stderr
+	err := c.Run()
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
 
 func displayHidden(txt string) (string, error) {
@@ -223,8 +240,15 @@ loo:
 				}
 			}
 
+			l := ""
 			for _, i := range lst2 {
-				fmt.Printf("  id%03d '%s'\n", i.ID, i.Name)
+				l += fmt.Sprintf("  id%03d '%s'\n", i.ID, i.Name)
+			}
+
+			err = useLess(l)
+			if err != nil {
+				fmt.Println("error: " + err.Error())
+				continue
 			}
 
 		case "d":
