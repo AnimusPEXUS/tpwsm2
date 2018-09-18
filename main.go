@@ -27,7 +27,7 @@ const (
   !d id        - delete
 
   !r           - change password
-  !quit, !exit - exit
+  !quit, !exit - exit (Ctrl+d also)
 
   other_text   - create if not exists and start editing
 `
