@@ -19,6 +19,20 @@ import (
 	"golang.org/x/crypto/ssh/terminal"
 )
 
+const (
+	HELP_TEXT = `
+  !h, !help    - help
+
+  !l           - list
+  !d id        - delete
+
+  !r           - change password
+  !quit, !exit - exit
+
+  other_text   - create if not exists and start editing
+`
+)
+
 type Data struct {
 	gorm.Model
 	Name string
@@ -136,63 +150,30 @@ loo:
 
 		command_splitted := strings.Split(command, " ")
 
-		switch command_splitted[0] {
-		default:
-			fmt.Println("unknown command")
-		case "h":
-			fallthrough
-		case "help":
-			fmt.Println(`
-  h, help - help
-
-  l       - list
-  c name  - create
-  e id    - edit
-  v id    - view
-  d id    - delete
-
-  r       - change password
-`)
-
-		case "c":
-			if len(command_splitted) != 2 {
-				fmt.Println("name required")
-				continue
-			}
-
-			err = db.Create(&Data{Name: command_splitted[1]}).Error
-			if err != nil {
-				fmt.Println("error: " + err.Error())
-				continue
-			}
-
-		case "v":
-			if len(command_splitted) != 2 {
-				fmt.Println("id required")
-				continue
-			}
-
+		if len(command_splitted[0]) > 0 && command_splitted[0][0] != '!' {
 			var dat Data
-			err = db.Where("id = ?", command_splitted[1]).First(&dat).Error
+
+			err = db.Where("name = ?", command_splitted[0]).First(&dat).Error
 			if err != nil {
-				fmt.Println("error: " + err.Error())
-				continue
+				if err == gorm.ErrRecordNotFound {
+					dat = Data{Name: command_splitted[0]}
+					err = db.Create(&dat).Error
+					if err != nil {
+						fmt.Println("error: " + err.Error())
+						continue
+					}
+				} else {
+
+					fmt.Println("error: " + err.Error())
+					continue
+				}
 			}
 
-			displayHidden(dat.Text)
-
-		case "e":
-			if len(command_splitted) != 2 {
-				fmt.Println("id required")
-				continue
-			}
-
-			var dat Data
-			err = db.Where("id = ?", command_splitted[1]).First(&dat).Error
-			if err != nil {
-				fmt.Println("error: " + err.Error())
-				continue
-			}
+			//			err = db.Where("name = ?", command_splitted[0]).First(&dat).Error
+			//			if err != nil {
+			//				fmt.Println("error: " + err.Error())
+			//				continue
+			//			}
 
 			d, err := displayHidden(dat.Text)
 			if err != nil {
@@ -206,7 +187,19 @@ loo:
 				continue
 			}
 
-		case "l":
+			continue
+		}
+
+		switch command_splitted[0] {
+		default:
+			fmt.Println("error: command not supported")
+			continue
+		case "!h":
+			fallthrough
+		case "!help":
+			fmt.Println(HELP_TEXT)
+
+		case "!l":
 			if len(command_splitted) != 1 {
 				fmt.Println("no params")
 				continue
@@ -251,7 +244,7 @@ loo:
 				continue
 			}
 
-		case "d":
+		case "!d":
 			if len(command_splitted) != 2 {
 				fmt.Println("id required")
 				continue
@@ -263,7 +256,7 @@ loo:
 				continue
 			}
 
-		case "r":
+		case "!r":
 			if len(command_splitted) != 1 {
 				fmt.Println("no params")
 				continue
@@ -297,9 +290,9 @@ loo:
 				continue
 			}
 
-		case "exit":
+		case "!exit":
 			fallthrough
-		case "quit":
+		case "!quit":
 			break loo
 		}
 	}
