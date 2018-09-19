@@ -3,6 +3,7 @@ package main
 import (
 	"bufio"
 	"bytes"
+	"errors"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -34,6 +35,7 @@ const (
   other_text   - used as name - start editing existing record.
                  if prefixed with '+' - create if not exists.
 `
+	STORAGE_FN = "data.db"
 )
 
 type Data struct {
@@ -64,6 +66,9 @@ func displayHidden(txt string, filename string) (string, error) {
 	editor := e.Get("EDITOR", "mcedit")
 
 	fn := path.Base(filename)
+	if fn == STORAGE_FN {
+		return "", errors.New("unacceptable name")
+	}
 
 	err := ioutil.WriteFile(fn, []byte(txt), 0700)
 	if err != nil {
