@@ -1,19 +1,22 @@
 
-= About =
+About
+-----
 
 Simple encrypted storage for named texts
 
-= Installation =
+Installation
+------------
 
 `go get -u github.com/AnimusPEXUS/tpwsm`
 `go install github.com/AnimusPEXUS/tpwsm`
 
-= Usage =
+Usage
+-----
 
 ```
 cd dir_where_to_store
 
-./tpwsm
+> tpwsm
 (now enter new password)
 
 > !help
