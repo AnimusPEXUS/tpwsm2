@@ -36,6 +36,7 @@ const (
                  if prefixed with '+' - create if not exists.
 `
 	STORAGE_FN = "data.db"
+	TMP_FN     = "tpwsm.tmp.fn"
 )
 
 type Data struct {
@@ -66,6 +67,7 @@ func displayHidden(txt string, filename string) (string, error) {
 	editor := e.Get("EDITOR", "mcedit")
 
 	fn := path.Base(filename)
+
 	if fn == STORAGE_FN {
 		return "", errors.New("unacceptable name")
 	}
@@ -192,7 +194,7 @@ loo:
 				}
 			}
 
-			d, err := displayHidden(dat.Text, name)
+			d, err := displayHidden(dat.Text, name+"."+TMP_FN)
 			if err != nil {
 				fmt.Println("error: " + err.Error())
 				continue
