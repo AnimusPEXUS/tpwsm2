@@ -133,6 +133,8 @@ func main() {
 		panic(err)
 	}
 
+	fmt.Println(HELP_TEXT)
+
 	reader := bufio.NewReader(os.Stdin)
 
 loo:
