@@ -8,6 +8,7 @@ import (
 	"io/ioutil"
 	"os"
 	"os/exec"
+	"path"
 	"strings"
 
 	_ "github.com/xeodou/go-sqlcipher"
@@ -25,11 +26,13 @@ const (
 
   !l           - list
   !d id        - delete
+  !n id name   - rename
 
   !r           - change password
   !quit, !exit - exit (Ctrl+d also)
 
-  other_text   - create if not exists and start editing
+  other_text   - used as name - start editing existing record.
+                 if prefixed with '+' - create if not exists.
 `
 )
 
@@ -55,12 +58,12 @@ func useLess(txt string) error {
 	return nil
 }
 
-func displayHidden(txt string) (string, error) {
+func displayHidden(txt string, filename string) (string, error) {
 
 	e := environ.NewFromStrings(os.Environ())
 	editor := e.Get("EDITOR", "mcedit")
 
-	fn := "tmp.fl"
+	fn := path.Base(filename)
 
 	err := ioutil.WriteFile(fn, []byte(txt), 0700)
 	if err != nil {
@@ -151,12 +154,20 @@ loo:
 		command_splitted := strings.Split(command, " ")
 
 		if len(command_splitted[0]) > 0 && command_splitted[0][0] != '!' {
+
+			name := command_splitted[0]
+
+			plus := strings.HasPrefix(name, "+")
+			if plus {
+				name = name[1:]
+			}
+
 			var dat Data
 
-			err = db.Where("name = ?", command_splitted[0]).First(&dat).Error
+			err = db.Where("name = ?", name).First(&dat).Error
 			if err != nil {
-				if err == gorm.ErrRecordNotFound {
-					dat = Data{Name: command_splitted[0]}
+				if err == gorm.ErrRecordNotFound && plus {
+					dat = Data{Name: name}
 					err = db.Create(&dat).Error
 					if err != nil {
 						fmt.Println("error: " + err.Error())
@@ -169,13 +180,7 @@ loo:
 				}
 			}
 
-			//			err = db.Where("name = ?", command_splitted[0]).First(&dat).Error
-			//			if err != nil {
-			//				fmt.Println("error: " + err.Error())
-			//				continue
-			//			}
-
-			d, err := displayHidden(dat.Text)
+			d, err := displayHidden(dat.Text, name)
 			if err != nil {
 				fmt.Println("error: " + err.Error())
 				continue
@@ -235,7 +240,7 @@ loo:
 
 			l := ""
 			for _, i := range lst2 {
-				l += fmt.Sprintf("  id%03d '%s'\n", i.ID, i.Name)
+				l += fmt.Sprintf("  %3d '%s'\n", i.ID, i.Name)
 			}
 
 			err = useLess(l)
@@ -253,6 +258,18 @@ loo:
 			err = db.Where("id = ?", command_splitted[1]).Delete(&Data{}).Error
 			if err != nil {
 				fmt.Println(err)
+				continue
+			}
+
+		case "!n":
+			if len(command_splitted) != 3 {
+				fmt.Println("id and name required")
+				continue
+			}
+
+			err = db.Model(&Data{}).Where("id = ?", command_splitted[1]).Update("Name", command_splitted[2]).Error
+			if err != nil {
+				fmt.Println("error: " + err.Error())
 				continue
 			}
 
