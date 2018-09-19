@@ -24,11 +24,11 @@ cd dir_where_to_store
 
   !l           - list
   !d id        - delete
+  !n id name   - rename
 
   !r           - change password
   !quit, !exit - exit (Ctrl+d also)
 
-  other_text   - create if not exists and start editing
-
-
+  other_text   - used as name - start editing existing record.
+                 if prefixed with '+' - create if not exists.
 ```
