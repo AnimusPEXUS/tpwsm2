@@ -169,6 +169,11 @@ loo:
 				name = name[1:]
 			}
 
+			if path.Base(name) == STORAGE_FN {
+				fmt.Println("error: unacceptable name")
+				continue
+			}
+
 			var dat Data
 
 			err = db.Where("name = ?", name).First(&dat).Error
