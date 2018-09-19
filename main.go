@@ -121,7 +121,7 @@ func main() {
 		password = p
 	}
 
-	db, err := gorm.Open("sqlite3", "data.db")
+	db, err := gorm.Open("sqlite3", STORAGE_FN)
 	if err != nil {
 		panic(err)
 	}
