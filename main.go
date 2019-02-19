@@ -7,10 +7,12 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
+	"log"
 	"os"
 	"os/exec"
 	"path"
 	"strings"
+	"time"
 
 	_ "github.com/xeodou/go-sqlcipher"
 
@@ -80,6 +82,25 @@ func displayHidden(txt string, filename string) (string, error) {
 	c := exec.Command(editor, fn)
 	c.Stdout = os.Stdout
 	c.Stderr = os.Stderr
+
+	no_need_to_delete := make(chan bool, 0)
+
+	go func(no_need_to_delete chan bool, fn string) {
+		log.Print("scheduled automatic " + fn + " delete")
+
+		select {
+		case <-no_need_to_delete:
+			log.Print("automatic " + fn + " delete canceled")
+			return
+		case <-time.After(time.Second * 10):
+			err = os.Remove(fn)
+			if err != nil {
+				log.Print(err)
+			}
+		}
+
+	}(no_need_to_delete, fn)
+
 	err = c.Run()
 	if err != nil {
 		return "", err
@@ -94,6 +115,8 @@ func displayHidden(txt string, filename string) (string, error) {
 	if err != nil {
 		return "", err
 	}
+
+	no_need_to_delete <- true
 
 	return string(d), nil
 }
