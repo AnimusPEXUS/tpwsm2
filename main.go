@@ -93,6 +93,7 @@ func displayHidden(txt string, filename string) (string, error) {
 			log.Print("automatic " + fn + " delete canceled")
 			return
 		case <-time.After(time.Second * 10):
+			log.Print("timedout. deleting " + fn)
 			err = os.Remove(fn)
 			if err != nil {
 				log.Print(err)
