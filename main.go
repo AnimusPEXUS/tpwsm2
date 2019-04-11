@@ -3,6 +3,11 @@ package main
 import (
 	"bufio"
 	"bytes"
+	"crypto/aes"
+	"crypto/cipher"
+	"crypto/rand"
+	"crypto/sha256"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -11,41 +16,33 @@ import (
 	"os"
 	"os/exec"
 	"path"
+	"sort"
 	"strings"
 	"time"
 
-	_ "github.com/xeodou/go-sqlcipher"
-
 	"github.com/AnimusPEXUS/utils/environ"
-
-	"github.com/jinzhu/gorm"
 
 	"golang.org/x/crypto/ssh/terminal"
 )
 
 const (
 	HELP_TEXT = `
-  !h, !help    - help
+  !h, !help     - help
 
-  !l           - list
-  !d id        - delete
-  !n id name   - rename
+  !l            - list
+  !d name       - delete
+  !n name name2 - rename
 
-  !r           - change password
-  !quit, !exit - exit (Ctrl+d also)
+  !s            - save
+  !r            - change password
+  !quit, !exit  - exit (Ctrl+d also)
 
-  other_text   - used as name - start editing existing record.
-                 if prefixed with '+' - create if not exists.
+  other_text    - used as name - start editing existing record.
+                  if prefixed with '+' - create if not exists.
 `
 	STORAGE_FN = "data.db"
 	TMP_FN     = "tpwsm.tmp.fn"
 )
-
-type Data struct {
-	gorm.Model
-	Name string
-	Text string
-}
 
 func useLess(txt string) error {
 
@@ -134,9 +131,93 @@ func askPass(prompt string) (string, error) {
 	return string(res), nil
 }
 
-func main() {
+func WriteEncFile(filename string, passwds map[string]string, passwd string) error {
 
-	defer fmt.Println("Bye!")
+	fmt.Println("writting " + filename)
+
+	os.Rename(filename, filename+".backup")
+
+	plaintext, err := json.MarshalIndent(passwds, "  ", "  ")
+	if err != nil {
+		return err
+	}
+
+	h := sha256.New()
+	h.Write([]byte(passwd))
+
+	block, err := aes.NewCipher(h.Sum([]byte{}))
+	if err != nil {
+		return err
+	}
+
+	ciphertext := make([]byte, aes.BlockSize+len(plaintext))
+	iv := ciphertext[:aes.BlockSize]
+	if _, err := io.ReadFull(rand.Reader, iv); err != nil {
+		return err
+	}
+
+	stream := cipher.NewCFBEncrypter(block, iv)
+	stream.XORKeyStream(ciphertext[aes.BlockSize:], plaintext)
+
+	f, err := os.Create(filename)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+
+	_, err = io.Copy(f, bytes.NewReader(ciphertext))
+	if err != nil {
+		return err
+	}
+
+	return nil
+
+}
+
+func Save(passwds map[string]string, passwd string) error {
+	err := WriteEncFile(STORAGE_FN, passwds, passwd)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func ReadEncFile(filename string, passwd string) (map[string]string, error) {
+
+	ciphertext, err := ioutil.ReadFile(filename)
+	if err != nil {
+		return nil, err
+	}
+
+	h := sha256.New()
+	h.Write([]byte(passwd))
+
+	block, err := aes.NewCipher(h.Sum([]byte{}))
+	if err != nil {
+		return nil, err
+	}
+
+	if len(ciphertext) < aes.BlockSize {
+		return nil, errors.New("ciphertext too short")
+	}
+	iv := ciphertext[:aes.BlockSize]
+	ciphertext = ciphertext[aes.BlockSize:]
+
+	stream := cipher.NewCFBDecrypter(block, iv)
+
+	stream.XORKeyStream(ciphertext, ciphertext)
+
+	ret := make(map[string]string)
+
+	err = json.Unmarshal(ciphertext, &ret)
+	if err != nil {
+		return nil, err
+	}
+
+	return ret, nil
+}
+
+func main() {
 
 	fmt.Printf("")
 
@@ -147,22 +228,29 @@ func main() {
 		password = p
 	}
 
-	db, err := gorm.Open("sqlite3", STORAGE_FN)
-	if err != nil {
-		panic(err)
-	}
-	defer db.Close()
+	// password_e := url.QueryEscape(password)
 
-	p := "PRAGMA key = '" + password + "';"
-	err = db.Exec(p).Error
+	// values := &url.Values{
+	// 	"_key": []string{password},
+	// }
+
+	// fmt.Println("values:", values.Encode())
+
+	// values_e := values.Encode()
+
+	// fmt.Println("password:", password)
+	// fmt.Println("values_e:", values_e)
+
+	fmt.Println("Trying to open file '" + STORAGE_FN + "'")
+	passwords, err := ReadEncFile(STORAGE_FN, password)
 	if err != nil {
 		panic(err)
 	}
 
-	err = db.AutoMigrate(&Data{}).Error
-	if err != nil {
-		panic(err)
-	}
+	defer func() {
+		Save(passwords, password)
+		fmt.Println("Bye!")
+	}()
 
 	fmt.Println(HELP_TEXT)
 
@@ -200,35 +288,24 @@ loo:
 				continue
 			}
 
-			var dat Data
-
-			err = db.Where("name = ?", name).First(&dat).Error
-			if err != nil {
-				if err == gorm.ErrRecordNotFound && plus {
-					dat = Data{Name: name}
-					err = db.Create(&dat).Error
-					if err != nil {
-						fmt.Println("error: " + err.Error())
-						continue
-					}
+			_, ok := passwords[name]
+			if !ok {
+				if plus {
+					passwords[name] = ""
 				} else {
-
-					fmt.Println("error: " + err.Error())
+					fmt.Println("error: no such record")
 					continue
 				}
+
 			}
 
-			d, err := displayHidden(dat.Text, name+"."+TMP_FN)
+			d, err := displayHidden(passwords[name], name+"."+TMP_FN)
 			if err != nil {
 				fmt.Println("error: " + err.Error())
 				continue
 			}
 
-			err = db.Model(&dat).Update("Text", string(d)).Error
-			if err != nil {
-				fmt.Println("error: " + err.Error())
-				continue
-			}
+			passwords[name] = string(d)
 
 			continue
 		}
@@ -242,46 +319,34 @@ loo:
 		case "!help":
 			fmt.Println(HELP_TEXT)
 
+		case "!s":
+			err = Save(passwords, password)
+			if err != nil {
+				fmt.Println("error: " + err.Error())
+				continue
+			}
+			continue
+
 		case "!l":
 			if len(command_splitted) != 1 {
 				fmt.Println("no params")
 				continue
 			}
 
-			lst2 := make([]*Data, 0)
+			l := make([]string, 0)
 
-			{
-				lst := make([]*Data, 0)
-
-				err := db.Find(&lst).Error
-				if err != nil {
-					fmt.Println("error: " + err.Error())
-					continue
-				}
-
-				for _, i := range lst {
-					lst2 = append(lst2, i)
-				}
+			for k, _ := range passwords {
+				l = append(l, k)
 			}
 
-			if len(lst2) > 1 {
-				for i := 0; i != len(lst2)-1; i++ {
-					for j := i + 1; j != len(lst2); j++ {
-						if lst2[i].Name > lst2[j].Name {
-							z := lst2[i]
-							lst2[i] = lst2[j]
-							lst2[j] = z
-						}
-					}
-				}
+			sort.Strings(l)
+
+			l2 := ""
+			for _, l := range l {
+				l2 += fmt.Sprintf(" %s\n", l)
 			}
 
-			l := ""
-			for _, i := range lst2 {
-				l += fmt.Sprintf("  %3d '%s'\n", i.ID, i.Name)
-			}
-
-			err = useLess(l)
+			err = useLess(l2)
 			if err != nil {
 				fmt.Println("error: " + err.Error())
 				continue
@@ -293,11 +358,7 @@ loo:
 				continue
 			}
 
-			err = db.Where("id = ?", command_splitted[1]).Delete(&Data{}).Error
-			if err != nil {
-				fmt.Println(err)
-				continue
-			}
+			delete(passwords, command_splitted[1])
 
 		case "!n":
 			if len(command_splitted) != 3 {
@@ -305,11 +366,9 @@ loo:
 				continue
 			}
 
-			err = db.Model(&Data{}).Where("id = ?", command_splitted[1]).Update("Name", command_splitted[2]).Error
-			if err != nil {
-				fmt.Println("error: " + err.Error())
-				continue
-			}
+			passwords[command_splitted[2]] = passwords[command_splitted[1]]
+
+			delete(passwords, command_splitted[1])
 
 		case "!r":
 			if len(command_splitted) != 1 {
@@ -338,12 +397,7 @@ loo:
 				continue
 			}
 
-			p := "PRAGMA rekey = '" + password1 + "';"
-			err = db.Exec(p).Error
-			if err != nil {
-				fmt.Println(err)
-				continue
-			}
+			password = password1
 
 		case "!exit":
 			fallthrough
