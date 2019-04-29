@@ -80,7 +80,7 @@ func displayHidden(txt string, filename string) (string, error) {
 	c.Stdout = os.Stdout
 	c.Stderr = os.Stderr
 
-	no_need_to_delete := make(chan bool, 0)
+	no_need_to_delete := make(chan bool, 1)
 
 	go func(no_need_to_delete chan bool, fn string) {
 		log.Print("scheduled automatic " + fn + " delete")
@@ -104,6 +104,8 @@ func displayHidden(txt string, filename string) (string, error) {
 		return "", err
 	}
 
+	no_need_to_delete <- true
+
 	d, err := ioutil.ReadFile(fn)
 	if err != nil {
 		return "", err
@@ -113,8 +115,6 @@ func displayHidden(txt string, filename string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-
-	no_need_to_delete <- true
 
 	return string(d), nil
 }
